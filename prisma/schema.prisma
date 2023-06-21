@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  email           String    @unique
+  password        String
+  bio             String?
+  dob             DateTime?
+  gender          String?
+  location        String?
+  profileImageUrl String?   
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  matches         Match[]
+  likesSent       Like[]    @relation("Sender")
+  likesReceived   Like[]    @relation("Receiver")
+  unlikesSent     Unlike[]  @relation("Sender")
+  unlikesReceived Unlike[]  @relation("Receiver")
+  messageSent     Message[] @relation("MessageSender")
+  messageReceiver Message[] @relation("MessageReceiver")
+
+  Conversation   Conversation? @relation(fields: [conversationId], references: [id])
+  conversationId String?       @db.ObjectId
+}
+
+model Match {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userid], references: [id])
+  userid    String   @db.ObjectId
+}
+
+model Like {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt  DateTime @default(now())
+  sender     User     @relation("Sender", fields: [senderId], references: [id])
+  senderId   String   @db.ObjectId
+  receiver   User     @relation("Receiver", fields: [receiverId], references: [id])
+  receiverId String   @db.ObjectId
+  isMatch    Boolean
+}
+
+model Unlike {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt  DateTime @default(now())
+  sender     User     @relation("Sender", fields: [senderId], references: [id])
+  senderId   String   @db.ObjectId
+  receiver   User     @relation("Receiver", fields: [receiverId], references: [id])
+  receiverId String   @db.ObjectId
+}
+
+model Conversation {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt    DateTime  @default(now())
+  participants User[]
+  messages     Message[]
+}
+
+model Message {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  content        String
+  createdAt      DateTime     @default(now())
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id])
+  senderId       String       @db.ObjectId
+  receiver       User         @relation("MessageReceiver", fields: [receiverId], references: [id])
+  receiverId     String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String       @db.ObjectId
+}
