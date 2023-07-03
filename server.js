@@ -201,6 +201,22 @@ app.post("/users/:id/like", async (req, res) => {
         },
       });
 
+      // Update the sender's conversationId
+      await prisma.user.update({
+        where: { id: sender.id },
+        data: {
+          conversationId: conversation.id,
+        },
+      });
+
+      // Update the receiver's conversationId
+      await prisma.user.update({
+        where: { id: receiver.id },
+        data: {
+          conversationId: conversation.id,
+        },
+      });
+
       // Emit the "conversationCreated" event to both users' sockets
 
       pusher.trigger("my-channel", sender.id, {
@@ -299,28 +315,66 @@ app.get("/conversations/:conversationId", async (req, res) => {
   }
 });
 
-// Get matches for user
-app.get("/users/:id/matches", async (req, res) => {
-  const { id } = req.params;
-
+// send message -- done
+app.post("/conversations/:conversationId/messages", async (req, res) => {
+  const conversationId = req.params.conversationId;
+  const { senderId, content, receiverId } = req.body;
+  log(content);
   try {
-    const user = await prisma.user.findUnique({
-      where: { id },
-      include: { matches: { include: { user: true } } },
+    const conversation = await prisma.conversation.findUnique({
+      where: {
+        id: conversationId,
+      },
     });
 
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found" });
     }
 
-    const matches = user.matches;
-    res.json(matches);
+    const message = await prisma.message.create({
+      data: {
+        content,
+        sender: { connect: { id: senderId } },
+        conversation: { connect: { id: conversationId } },
+        receiver: {
+          connect: {
+            id: receiverId,
+          },
+        },
+      },
+    });
+
+    res.json(message);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Error sending message:", error);
+    res
+      .status(500)
+      .json({ error: "An error occurred while sending the message" });
   }
 });
+
+// Get matches for user
+// app.get("/users/:id/matches", async (req, res) => {
+//   const { id } = req.params;
+
+//   try {
+//     const user = await prisma.user.findUnique({
+//       where: { id },
+//       include: { matches: { include: { user: true } } },
+//     });
+
+//     if (!user) {
+//       res.status(404).json({ error: "User not found" });
+//       return;
+//     }
+
+//     const matches = user.matches;
+//     res.json(matches);
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// });
 
 // app.get("/likes/:id", async (req, res) => {
 //   const { receiverId } = req.params;
