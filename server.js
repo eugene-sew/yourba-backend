@@ -1,14 +1,14 @@
 const express = require("express");
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcrypt");
-const fs = require("fs");
-const path = require("path");
+const http = require("http");
 const { log } = require("console");
-const { promisify } = require("util");
 const multer = require("multer");
 const cors = require("cors");
-const writeFileAsync = promisify(fs.writeFile);
+const Pusher = require("pusher");
+
 const app = express();
+
 const prisma = new PrismaClient();
 
 app.use(cors({ origin: "*" }));
@@ -29,7 +29,13 @@ app.post("/login", upload.single("profileImage"), async (req, res) => {
   const { email, password } = req.body;
   log("login data ", req.body);
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        matches: true,
+        likesReceived: true,
+      },
+    });
 
     if (!user) {
       res.json({ error: "User not found" });
@@ -89,22 +95,28 @@ app.post("/users/create", upload.single("profileImage"), async (req, res) => {
   }
 });
 
-// Get user profile
-app.get("/users/:id", async (req, res) => {
+// get all profiles - integrated
+app.get("/profiles/:id", async (req, res) => {
+  // log("serving profiles");
   const { id } = req.params;
-
   try {
-    const user = await prisma.user.findUnique({ where: { id } });
+    const users = await prisma.user.findMany({
+      where: {
+        NOT: {
+          id: id, // Exclude the profile of the logged-in user
+        },
+      },
+    });
 
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
+    if (!users) {
+      res.status(404).json({ error: "Users not found" });
       return;
     }
 
-    res.json(user);
+    res.json({ success: true, users });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Internal server error" });
+    res.json({ error: "Internal server error" });
   }
 });
 
@@ -131,20 +143,35 @@ app.put("/users/:id", async (req, res) => {
   }
 });
 
-// Like user
+// Like user -- done
 app.post("/users/:id/like", async (req, res) => {
   const { id } = req.params;
   const { senderId } = req.body;
 
   try {
-    const sender = await prisma.user.findUnique({ where: { id: senderId } });
-    const receiver = await prisma.user.findUnique({ where: { id } });
+    const sender = await prisma.user.findUnique({
+      where: { id: senderId },
+      include: { likesReceived: true },
+    });
+
+    const receiver = await prisma.user.findUnique({
+      where: { id },
+      include: { likesReceived: true },
+    });
 
     if (!sender || !receiver) {
-      res.status(400).json({ error: "Invalid user IDs" });
+      res.json({ error: "Invalid user IDs" });
       return;
     }
 
+    log(sender);
+
+    // Check if receiver exists in the sender's likes array
+    const receiverLiked = sender.likesReceived.some(
+      (like) => like.senderId === receiver.id
+    );
+
+    log(receiverLiked);
     // Create a new like
     const like = await prisma.like.create({
       data: {
@@ -154,10 +181,121 @@ app.post("/users/:id/like", async (req, res) => {
       },
     });
 
-    res.json(like);
+    // Emit the "likeReceived" event to the receiver's socket
+    const pusher = new Pusher({
+      appId: "1623541",
+      key: "a728b9c53d826193a26d",
+      secret: "15f12a0efe554a7afa6e",
+      cluster: "eu",
+      useTLS: true,
+    });
+
+    if (receiverLiked) {
+      // Create a new conversation if receiver likes the sender as well
+      log("convo path");
+      const conversation = await prisma.conversation.create({
+        data: {
+          participants: {
+            connect: [{ id: sender.id }, { id: receiver.id }],
+          },
+        },
+      });
+
+      // Emit the "conversationCreated" event to both users' sockets
+
+      pusher.trigger("my-channel", sender.id, {
+        event: "conversationCreated",
+        conversationId: conversation.id,
+      });
+
+      pusher.trigger("my-channel", receiver.id, {
+        event: "conversationCreated",
+        conversationId: conversation.id,
+      });
+    } else {
+      log("normal path");
+      pusher.trigger("my-channel", receiver.id, {
+        message: "hello world",
+      });
+    }
+    res.json({ success: true, like });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// get all conversations between matched users --done
+app.get("/users/:userId/conversations", async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        participants: {
+          some: {
+            id: userId,
+          },
+        },
+      },
+      include: {
+        participants: true,
+        messages: true,
+      },
+    });
+
+    // Filter and map the response
+    const filteredResponse = conversations.map((convo) => {
+      // Filter the participants array to exclude the current user
+      const otherParticipant = convo.participants.filter(
+        (participant) => participant.id !== userId
+      );
+
+      // Extract the messages array
+      const messages = convo.messages;
+
+      // Return the filtered conversation object with the other participant and messages
+      return {
+        ...convo,
+        participants: otherParticipant,
+        messages: messages,
+      };
+    });
+
+    res.json({ success: true, convo: filteredResponse });
+  } catch (error) {
+    console.error("Error retrieving conversations:", error);
+    res
+      .status(500)
+      .json({ error: "An error occurred while retrieving conversations" });
+  }
+});
+
+//get one convo -- done
+app.get("/conversations/:conversationId", async (req, res) => {
+  const { conversationId } = req.params;
+
+  try {
+    const conversation = await prisma.conversation.findUnique({
+      where: {
+        id: conversationId,
+      },
+      include: {
+        participants: true,
+        messages: true,
+      },
+    });
+
+    if (!conversation) {
+      return res.json({ error: "Conversation not found" });
+    }
+
+    res.json({ success: true, convo: conversation });
+  } catch (error) {
+    console.error("Error retrieving conversation:", error);
+    res
+      .status(500)
+      .json({ error: "An error occurred while retrieving conversation" });
   }
 });
 
@@ -176,7 +314,7 @@ app.get("/users/:id/matches", async (req, res) => {
       return;
     }
 
-    const matches = user.matches.filter((match) => match.isMatch);
+    const matches = user.matches;
     res.json(matches);
   } catch (error) {
     console.error(error);
@@ -184,49 +322,27 @@ app.get("/users/:id/matches", async (req, res) => {
   }
 });
 
-// Create conversation between matched users
-app.post("/conversations", async (req, res) => {
-  const { user1Id, user2Id } = req.body;
+// app.get("/likes/:id", async (req, res) => {
+//   const { receiverId } = req.params;
 
-  try {
-    const user1 = await prisma.user.findUnique({
-      where: { id: user1Id },
-      include: { matches: true },
-    });
-    const user2 = await prisma.user.findUnique({
-      where: { id: user2Id },
-      include: { matches: true },
-    });
+//   try {
+//     let recievedlikes;
 
-    if (!user1 || !user2) {
-      res.status(400).json({ error: "Invalid user IDs" });
-      return;
-    }
+//     // Fetch likes with the specified receiverId from the database
+//     recievedlikes = await prisma.like.findMany({
+//       where: {
+//         receiverId: receiverId,
+//       },
+//     });
 
-    const user1Matches = user1.matches.map((match) => match.userid);
-    const user2Matches = user2.matches.map((match) => match.userid);
+//     // Return the likes as the response
 
-    // Check if users are matched
-    if (!user1Matches.includes(user2.id) || !user2Matches.includes(user1.id)) {
-      res.status(400).json({ error: "Users are not matched" });
-      return;
-    }
-
-    // Create a new conversation
-    const conversation = await prisma.conversation.create({
-      data: {
-        participants: {
-          connect: [{ id: user1.id }, { id: user2.id }],
-        },
-      },
-    });
-
-    res.json(conversation);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+//     res.json(recievedlikes);
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: "An error occurred while fetching likes." });
+//   }
+// });
 
 app.listen(port, () => {
   log(`Server is running on port ${port}`);
