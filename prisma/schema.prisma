@@ -4,10 +4,6 @@ generator client {
 
 datasource db {
   provider = "mongodb"
-<<<<<<< HEAD
-  url      = "mongodb+srv://admin:admin@cluster0.z0n4blt.mongodb.net/seeking"
-}
-=======
   url      = env("DATABASE_URL")
 }
 
@@ -15,7 +11,6 @@ datasource db {
 //  provider = "prisma-erd-generator"
 //  output = "../ERD.png"
 // }
->>>>>>> 5bf51d24aaa4eafd1ad29249a512d4f1958cdf1a
 
 model User {
   id              String    @id @default(auto()) @map("_id") @db.ObjectId
