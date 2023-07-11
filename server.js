@@ -6,10 +6,8 @@ const { log } = require("console");
 const multer = require("multer");
 const cors = require("cors");
 const Pusher = require("pusher");
-const { EmailJSResponseStatus, init, send } = require("emailjs-com");
-const service_key = "service_8ryd9xr";
-const template_key = "template_ml81tn6";
 
+const nodemailer = require("nodemailer");
 const app = express();
 
 const prisma = new PrismaClient();
@@ -21,7 +19,18 @@ app.use(express.json());
 app.use("/uploads", express.static("uploads"));
 const port = process.env.PORT || 4000;
 const upload = multer({ dest: "uploads/" });
-init("t2_rvsRlP-yVXSjEiGTy2");
+
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  auth: {
+    // TODO: replace `user` and `pass` values from <https://forwardemail.net>
+    user: "app.yourba@gmail.com",
+    pass: "yourbaapp1",
+  },
+});
+
 // endpoints
 app.get("/", (req, res) => {
   res.send("server is working");
@@ -95,11 +104,25 @@ app.post("/users/create", upload.single("profileImage"), async (req, res) => {
     //send email function here
     const templateParams = {
       to_name: name,
-      message: `${fullUrl}/verify-mail/${newUser.id}`,
+      message: ``,
       mail: email,
     };
 
-    await send(service_key, template_key, templateParams);
+    const info = await transporter.sendMail({
+      from: '"Hidden Cupid "', // sender address
+      to: email, // list of receivers
+      subject: "Yourba Account Activation", // Subject line
+      text: `Welcome to Yourba, ${newUser.name},
+
+      We're happy to have you on our soul finding platform, kindly click on the link below to verify your account
+
+      ${fullUrl}/verify-mail/${newUser.id}
+      with love ❤,
+      Yourba Team`, // plain text body
+    });
+
+    console.log("Message sent: %s", info.messageId);
+
     res.json({ success: true, user: newUser });
   } catch (error) {
     console.error(error);
