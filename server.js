@@ -91,10 +91,11 @@ app.post("/users/create", upload.single("profileImage"), async (req, res) => {
       },
     });
 
+    const fullUrl = req.protocol + "://" + req.get("host");
     //send email function here
     const templateParams = {
       to_name: name,
-      message: "http://localhost:4000/verify-mail",
+      message: `${fullUrl}/verify-mail/${newUser.id}`,
       mail: email,
     };
 
@@ -409,8 +410,8 @@ app.post("/conversations/:conversationId/messages", async (req, res) => {
 //   }
 // });
 
-app.get("/verify-email", (req, res) => {
-  const { id, email } = req.data;
+app.get("/verify-email/;id", (req, res) => {
+  const { id } = req.params;
 
   // send email to the above email
 
