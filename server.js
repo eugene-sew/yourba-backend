@@ -6,19 +6,22 @@ const { log } = require("console");
 const multer = require("multer");
 const cors = require("cors");
 const Pusher = require("pusher");
+const { EmailJSResponseStatus, init, send } = require("emailjs-com");
+const service_key = "service_8ryd9xr";
+const template_key = "template_ml81tn6";
 
 const app = express();
 
 const prisma = new PrismaClient();
 
 app.use(cors({ origin: "*" }));
-
+EmailJSResponseStatus;
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use("/uploads", express.static("uploads"));
 const port = process.env.PORT || 4000;
 const upload = multer({ dest: "uploads/" });
-
+init("t2_rvsRlP-yVXSjEiGTy2");
 // endpoints
 app.get("/", (req, res) => {
   res.send("server is working");
@@ -88,6 +91,14 @@ app.post("/users/create", upload.single("profileImage"), async (req, res) => {
       },
     });
 
+    //send email function here
+    const templateParams = {
+      to_name: name,
+      message: "http://localhost:4000/verify-mail",
+      mail: email,
+    };
+
+    await send(service_key, template_key, templateParams);
     res.json({ success: true, user: newUser });
   } catch (error) {
     console.error(error);
@@ -397,6 +408,14 @@ app.post("/conversations/:conversationId/messages", async (req, res) => {
 //     res.status(500).json({ error: "An error occurred while fetching likes." });
 //   }
 // });
+
+app.get("/verify-email", (req, res) => {
+  const { id, email } = req.data;
+
+  // send email to the above email
+
+  res.json({});
+});
 
 app.listen(port, () => {
   log(`Server is running on port ${port}`);

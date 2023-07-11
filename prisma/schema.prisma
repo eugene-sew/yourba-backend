@@ -34,6 +34,7 @@ model User {
 
   Conversation   Conversation? @relation(fields: [conversationId], references: [id])
   conversationId String?       @db.ObjectId
+  verified Boolean?
 }
 
 model Match {
