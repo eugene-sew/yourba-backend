@@ -25,9 +25,8 @@ const transporter = nodemailer.createTransport({
   port: 465,
   secure: true,
   auth: {
-    type: "Login",
-    user: "securesally@gmail.com",
-    pass: "claffyuxftauljdw",
+    user: "app.yourba@gmail.com",
+    pass: "qsdbwtocglskbszi",
   },
 });
 
@@ -97,6 +96,7 @@ app.post("/users/create", upload.single("profileImage"), async (req, res) => {
         gender,
         location,
         profileImageUrl: req.file.path,
+        verified: false,
       },
     });
 
@@ -116,7 +116,7 @@ app.post("/users/create", upload.single("profileImage"), async (req, res) => {
 
       We're happy to have you on our soul finding platform, kindly click on the link below to verify your account
 
-      ${fullUrl}/verify-mail/${newUser.id}
+      https://yourbba.vercel.app/verify-mail/${newUser.id} \n
       with love ❤,
       Yourba Team`, // plain text body
     });
@@ -433,12 +433,23 @@ app.post("/conversations/:conversationId/messages", async (req, res) => {
 //   }
 // });
 
-app.get("/verify-email/;id", (req, res) => {
+app.get("/verify-email/:id", async (req, res) => {
   const { id } = req.params;
 
   // send email to the above email
+  const user = await prisma.user.update({
+    where: {
+      id: id,
+    },
+    data: {
+      verified: true,
+    },
+  });
 
-  res.json({});
+  if (!user) {
+    res.json({ error: "error identifying user" });
+  }
+  res.json({ success: true, user });
 });
 
 app.listen(port, () => {
