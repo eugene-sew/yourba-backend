@@ -116,7 +116,7 @@ app.post("/users/create", upload.single("profileImage"), async (req, res) => {
 
       We're happy to have you on our soul finding platform, kindly click on the link below to verify your account
 
-      https://yourbba.vercel.app/verify-mail/${newUser.id} \n
+      https://yourbba.vercel.app/#/verify-mail/${newUser.id} \n
       with love ❤,
       Yourba Team`, // plain text body
     });
